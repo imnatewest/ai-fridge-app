@@ -57,24 +57,42 @@ Reduce food waste and weeknight stress by giving households a single place to un
 * **Privacy:** keep receipts and household data encrypted at rest and in transit, allow easy data export/delete, and avoid training on private content without explicit consent.
 * **Cost control:** batch model calls, cache normalized products, and fall back to on-device ML for simple cases.
 
-## MVP roadmap (approx. 8–10 weeks)
+## MVP roadmap (barcode-first, approx. 8–10 weeks)
 
-1. **Week 1–2 – Foundations**
-   * Finalize UX wireframes and data models.
-   * Set up repo structure, SwiftUI scaffolding, and CI with Xcode Cloud or GitHub Actions.
-2. **Week 3–4 – Receipt ingestion**
-   * Integrate document scanner (VisionKit) and send images to backend.
-   * Build parsing pipeline with OCR + LLM to return structured line items.
-   * Expose manual add/edit flows for corrections.
-3. **Week 5–6 – Inventory & sync**
-   * Implement Firestore data model, offline persistence, and household sharing.
-   * Add expiration estimation heuristics and reminders via push notifications.
-4. **Week 7 – Meal recommendations**
-   * Connect to recipe APIs or build prompt templates to generate meal ideas.
-   * Let users favorite recipes and create auto-generated shopping lists.
-5. **Week 8 – Polish & analytics**
-   * Instrument analytics, tighten error handling, and prepare TestFlight build.
-   * Conduct hallway tests to validate comprehension and delight.
+### Week 1–2 – Foundations & Data Model
+- Finalize UX wireframes for scanning flow, inventory list, and item detail view.  
+- Define data models:  
+  `Item: name, barcode, category, quantity, unit, expiration_date, nutrition, timestamp`  
+  `User / Household: members[], settings, preferences`  
+- Set up SwiftUI project with Firebase Auth + Firestore sync.  
+- Implement basic inventory list UI with add/edit/delete.
+
+### Week 3 – Barcode Scanning & Product Lookup
+- Integrate AVFoundation or VisionKit for real-time barcode scanning.  
+- On successful scan, fetch metadata from the Open Food Facts API.  
+- Populate fields (`name`, `brand`, `category`, `nutrition_grade`) and store in Firestore.  
+- Add manual entry fallback for unknown barcodes.
+
+### Week 4 – Inventory Management & Expiration Logic
+- Editable quantities and local expiration reminders.  
+- Household sharing and offline persistence.
+
+### Week 5 – Meal Recommendations (AI Layer)
+- Backend `/recipes` endpoint generates meal ideas from current inventory using GPT-4o / Claude.  
+- Display recipe cards highlighting missing ingredients.  
+
+### Week 6 – Shopping List & Nutrition
+- Auto-generated shopping list for missing ingredients.  
+- Nutrition summaries via Open Food Facts data.  
+
+### Week 7 – Analytics & Polish
+- Add Mixpanel / Firebase Analytics, refine UI, handle API errors.  
+- Run small hallway usability tests.  
+
+### Week 8 – TestFlight Build & Feedback
+- Ship TestFlight beta, gather feedback, and choose next phase:  
+  • Add receipt OCR automation  or  • Add fridge snapshot AI vision.
+
 
 ## Getting started locally
 
