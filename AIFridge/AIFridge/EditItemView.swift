@@ -23,6 +23,33 @@ struct EditItemView: View {
         NavigationStack {
             Form {
                 if let barcode = item.barcode, !barcode.isEmpty {
+                    Section(header: Text("Product")) {
+                        Button {
+                            Task { await refetchProduct() }
+                        } label: {
+                            Label("Refetch product details", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(item.barcode?.isEmpty ?? true)
+
+                        if let brand = item.brand {
+                            Text("Brand: \(brand)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack {
+                            Text("Serving:")
+                            Spacer()
+                            if let sVal = item.servingSizeValue {
+                                Text("\(sVal, format: .number)")
+                            }
+                            if let sUnit = item.servingSizeUnit {
+                                Text(sUnit)
+                            }
+                        }
+                    }
+                }
+                if let barcode = item.barcode, !barcode.isEmpty {
                     Section(header: Text("Barcode")) {
                         Label(barcode, systemImage: "barcode")
                             .font(.body)
@@ -44,7 +71,7 @@ struct EditItemView: View {
                             .foregroundStyle(.red)
                     }
 
-                    TextField("Category", text: Binding($item.category, replacingNilWith: ""))
+                    TextField("Category", text: Binding(unwrapping: $item.category, replacingNilWith: ""))
                 }
 
                 Section(header: Text("Quantity")) {
@@ -145,19 +172,22 @@ struct EditItemView: View {
             print("❌ Error updating item: \(error)")
         }
     }
-}
 
-// MARK: - Optional String Binding Helper
-extension Binding where Value == String {
-    /// Convert `Binding<String?>` -> `Binding<String>` for TextField.
-    /// Writes empty strings back as `nil` to keep Firestore schema clean.
-    init(_ source: Binding<String?>, replacingNilWith defaultValue: String) {
-        self.init(
-            get: { source.wrappedValue ?? defaultValue },
-            set: { newValue in
-                source.wrappedValue = newValue.isEmpty ? nil : newValue
+    @MainActor
+    private func refetchProduct() async {
+        guard let code = item.barcode else { return }
+        do {
+            if let product = try await OpenFoodFactsService.shared.lookup(barcode: code) {
+                let mapped = OpenFoodFactsService.shared.itemFromProduct(product, barcode: code)
+                // apply mapped fields to item (preserve user edits)
+                item.brand = mapped.brand ?? item.brand
+                if let sVal = mapped.servingSizeValue { item.servingSizeValue = sVal }
+                if let sUnit = mapped.servingSizeUnit { item.servingSizeUnit = sUnit }
+                if let nServing = mapped.nutritionPerServing { item.nutritionPerServing = nServing }
             }
-        )
+        } catch {
+            print("❌ Error refetching product: \(error)")
+        }
     }
 }
 

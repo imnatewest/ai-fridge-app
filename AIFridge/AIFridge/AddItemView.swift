@@ -20,6 +20,10 @@ struct AddItemView: View {
     @State private var unit = "pcs"
     @State private var expirationDate = Date().addingTimeInterval(60 * 60 * 24 * 7) // +1 week
     @State private var barcode = ""
+    @State private var brand = ""
+    @State private var servingSizeValue: Double? = nil
+    @State private var servingSizeUnit: String? = nil
+    @State private var nutritionPerServing: Item.Nutrition? = nil
     @State private var productStatusMessage: String?
     @State private var isFetchingProduct = false
     @State private var showScanner = false
@@ -36,9 +40,9 @@ struct AddItemView: View {
                     Button {
                         showScanner = true
                     } label: {
-                        Label("Scan barcode", systemImage: "barcode.viewfinder")
+                        ScanBarcodeButtonLabel(isLoading: isFetchingProduct)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.plain)
                     .disabled(isFetchingProduct)
 
                     if !barcode.isEmpty {
@@ -59,6 +63,27 @@ struct AddItemView: View {
                         Text(productStatusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section(header: Text("Product")) {
+                    TextField("Brand", text: $brand)
+                        .autocapitalization(.words)
+
+                    HStack {
+                        TextField("Serving size value", value: Binding(unwrapping: $servingSizeValue, replacingNilWith: 0.0), format: .number)
+                            .keyboardType(.decimalPad)
+                        TextField("Unit", text: Binding(unwrapping: $servingSizeUnit, replacingNilWith: ""))
+                            .frame(width: 80)
+                            .autocapitalization(.none)
+                    }
+
+                    if let n = nutritionPerServing {
+                        NutritionFactsCard(
+                            nutrition: n,
+                            servingDescription: servingSizeDescription
+                        )
+                        .padding(.top, DesignSpacing.sm)
                     }
                 }
 
@@ -124,6 +149,17 @@ struct AddItemView: View {
         }
     }
 
+    // MARK: - Helpers
+    private var servingSizeDescription: String? {
+        guard let value = servingSizeValue else { return nil }
+        let formattedValue = formattedServingSize(value)
+
+        guard let unit = servingSizeUnit?.trimmingCharacters(in: .whitespacesAndNewlines), !unit.isEmpty else {
+            return formattedValue
+        }
+        return "\(formattedValue) \(unit)"
+    }
+
     // MARK: - Validation Logic
     private var isFormValid: Bool {
         nameError == nil && quantityError == nil && expirationError == nil
@@ -163,13 +199,19 @@ struct AddItemView: View {
         }
 
         var newItem = Item(
+            id: nil,
             name: name,
             category: category.isEmpty ? nil : category,
             quantity: quantity,
             unit: unit,
             expirationDate: expirationDate,
             timestamp: Date(),
-            barcode: barcode.isEmpty ? nil : barcode
+            barcode: barcode.isEmpty ? nil : barcode,
+            brand: brand.isEmpty ? nil : brand,
+            servingSizeValue: servingSizeValue,
+            servingSizeUnit: servingSizeUnit,
+            nutritionPer100g: nil,
+            nutritionPerServing: nutritionPerServing
         )
 
         do {
@@ -219,23 +261,97 @@ struct AddItemView: View {
 
     @MainActor
     private func applyProduct(_ product: OpenFoodFactsProduct) {
-        if let nameFromProduct = product.displayName {
-            name = nameFromProduct
-            validateName()
-        }
+        // Use the service mapper to create a partial Item and apply fields
+        let mapped = OpenFoodFactsService.shared.itemFromProduct(product, barcode: barcode.isEmpty ? nil : barcode)
 
-        if let categoryFromProduct = product.primaryCategory {
-            category = categoryFromProduct
-        }
+        name = mapped.name
+        validateName()
 
-        if let quantityTuple = product.parsedQuantity {
-            quantity = max(quantityTuple.amount, 1)
-            unit = quantityTuple.unit
-            validateQuantity()
+        if let c = mapped.category { category = c }
+        if let b = mapped.brand { brand = b }
+        quantity = max(mapped.quantity, 1)
+        unit = mapped.unit
+        validateQuantity()
+
+        if let sVal = mapped.servingSizeValue { servingSizeValue = sVal }
+        if let sUnit = mapped.servingSizeUnit { servingSizeUnit = sUnit }
+        nutritionPerServing = mapped.nutritionPerServing
+    }
+
+    private func formattedServingSize(_ value: Double) -> String {
+        let rounded = value.rounded()
+        if abs(rounded - value) < 0.001 {
+            return String(Int(rounded))
+        } else {
+            return String(format: "%.1f", value)
         }
     }
 }
 
 #Preview {
     AddItemView()
+}
+
+private struct ScanBarcodeButtonLabel: View {
+    let isLoading: Bool
+    @Environment(\.isEnabled) private var isEnabled
+
+    private var backgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.10, green: 0.45, blue: 0.94),
+                Color(red: 0.07, green: 0.32, blue: 0.80)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "barcode.viewfinder")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Scan Barcode")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("Autofill item details instantly")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+
+            Spacer()
+
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .scaleEffect(0.9)
+                    .tint(.white)
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(backgroundGradient)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
+        .opacity(isEnabled ? 1 : 0.6)
+    }
 }

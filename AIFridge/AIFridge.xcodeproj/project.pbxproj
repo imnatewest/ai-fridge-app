@@ -14,7 +14,7 @@
 
 /* Begin PBXFileReference section */
 		0DF2CC602E9EBFD30053E5B6 /* AIFridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIFridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		0DF2CC702E9EBFD40053E5B7 /* Config.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Config.shared.xcconfig; sourceTree = "<group>"; };
+		0DF2CC702E9EBFD40053E5B7 /* Config/Config.shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Config.shared.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -59,7 +59,7 @@
 		0DF2CC712E9EBFD40053E5B7 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				0DF2CC702E9EBFD40053E5B7 /* Config.shared.xcconfig */,
+				0DF2CC702E9EBFD40053E5B7 /* Config/Config.shared.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -274,7 +274,6 @@
 		0DF2CC6C2E9EBFD40053E5B6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				baseConfigurationReference = 0DF2CC702E9EBFD40053E5B7 /* Config.shared.xcconfig */;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -303,13 +302,13 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				baseConfigurationReference = 0DF2CC702E9EBFD40053E5B7;
 			};
 			name = Debug;
 		};
 		0DF2CC6D2E9EBFD40053E5B6 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				baseConfigurationReference = 0DF2CC702E9EBFD40053E5B7 /* Config.shared.xcconfig */;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -338,6 +337,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				baseConfigurationReference = 0DF2CC702E9EBFD40053E5B7;
 			};
 			name = Release;
 		};

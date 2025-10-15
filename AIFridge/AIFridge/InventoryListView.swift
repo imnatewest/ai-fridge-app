@@ -53,15 +53,78 @@ struct InventoryListView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                Group {
-                    switch viewMode {
-                    case .grid:
-                        gridContent
-                    case .list:
-                        listContent
+                DesignPalette.background
+                    .ignoresSafeArea()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: DesignSpacing.lg) {
+                        InventoryModernHeader(
+                            greeting: greeting,
+                            summary: summaryLine,
+                            syncStatus: lastSyncText,
+                            heroItem: heroItem,
+                            daysUntil: { daysUntilExpiration(for: $0) },
+                            colorForItem: colorFor(item:),
+                            onUse: useItem,
+                            onSnooze: snoozeItem,
+                            imageURL: imageURL(for:),
+                            requestImage: requestImage(for:)
+                        )
+                        .padding(.horizontal, DesignSpacing.lg)
+                        .padding(.top, DesignSpacing.lg)
+
+                        VStack(spacing: DesignSpacing.lg) {
+                            SummaryStatRow(
+                                expiringSoon: expiringSoonCount,
+                                expired: expiredCount,
+                                total: items.count
+                            )
+
+                            FilterSection(
+                                filter: $filter,
+                                sortOption: $sortOption,
+                                selectedCategory: $selectedCategory,
+                                viewMode: $viewMode,
+                                categories: categoriesForFilter
+                            )
+
+                            if let banner = bannerModel {
+                                NotificationBannerView(model: banner)
+                            }
+
+                            if !expiringSoonItems.isEmpty {
+                                ExpiringSoonCarousel(
+                                    items: expiringSoonItems,
+                                    daysUntil: { daysUntilExpiration(for: $0) },
+                                    iconForItem: iconName(for:),
+                                    colorForItem: colorFor(item:),
+                                    subtitleForItem: subtitle(for:),
+                                    imageURLForItem: imageURL(for:),
+                                    onSelect: { selectedItem = $0 },
+                                    requestImage: requestImage(for:)
+                                )
+                            }
+
+                            ModernInventorySection(
+                                sections: sectionedItems,
+                                viewMode: viewMode,
+                                iconForItem: iconName(for:),
+                                colorForItem: colorFor(item:),
+                                badgeTextForItem: badgeText(for:),
+                                subtitleForItem: subtitle(for:),
+                                daysUntil: { daysUntilExpiration(for: $0) },
+                                imageURLForItem: imageURL(for:),
+                                requestImage: requestImage(for:),
+                                onSelect: { selectedItem = $0 },
+                                onUse: useItem,
+                                onSnooze: snoozeItem,
+                                onDelete: deleteItem
+                            )
+                        }
+                        .padding(.horizontal, DesignSpacing.lg)
+                        .padding(.bottom, DesignSpacing.xl)
                     }
                 }
-                .animation(.easeInOut, value: viewMode)
 
                 FloatingAddButton {
                     showingAddItem = true
@@ -69,7 +132,7 @@ struct InventoryListView: View {
                 .padding(.trailing, DesignSpacing.lg)
                 .padding(.bottom, DesignSpacing.lg)
             }
-            .background(DesignPalette.background.ignoresSafeArea())
+            .toolbarTitleDisplayMode(.inline)
             .navigationTitle("My Fridge")
             .sheet(isPresented: $showingAddItem) {
                 AddItemView()
@@ -84,236 +147,6 @@ struct InventoryListView: View {
                 stopListening()
                 imageLoader.cancelAll()
             }
-        }
-    }
-}
-
-// MARK: - Layout Content
-private extension InventoryListView {
-    var categoriesForFilter: [String] {
-        let unique = uniqueCategories
-        if unique.contains("All") {
-            return unique
-        } else {
-            return ["All"] + unique
-        }
-    }
-
-    var heroItem: Item? {
-        filteredAndSortedItems
-            .filter { daysUntilExpiration(for: $0) >= 0 }
-            .min { $0.expirationDate < $1.expirationDate }
-    }
-
-    var gridColumns: [GridItem] {
-        [GridItem(.flexible(), spacing: DesignSpacing.md),
-         GridItem(.flexible(), spacing: DesignSpacing.md)]
-    }
-
-    @ViewBuilder
-    func headerStack(includeHero: Bool) -> some View {
-        VStack(alignment: .leading, spacing: DesignSpacing.md) {
-            headerView
-
-            FilterChips(
-                selection: $filter,
-                options: InventoryFilter.allCases
-            )
-
-            InventoryFilterBar(
-                sortOption: $sortOption,
-                selectedCategory: $selectedCategory,
-                viewMode: $viewMode,
-                categories: categoriesForFilter
-            )
-
-            if let banner = bannerModel {
-                NotificationBannerView(model: banner)
-            }
-
-            if includeHero, let item = heroItem {
-                InventoryHeroBanner(
-                    item: item,
-                    daysRemaining: daysUntilExpiration(for: item),
-                    color: colorFor(item: item),
-                    onUse: { useItem(item) },
-                    onSnooze: { snoozeItem(item) }
-                )
-                .transition(.opacity.combined(with: .scale))
-            }
-        }
-    }
-
-    private var headerView: some View {
-        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
-            Text(greeting)
-                .font(DesignTypography.title)
-            Text(summaryLine)
-                .font(DesignTypography.body)
-                .foregroundStyle(DesignPalette.secondaryText)
-            Text(lastSyncText)
-                .font(DesignTypography.caption)
-                .foregroundStyle(DesignPalette.secondaryText.opacity(0.8))
-        }
-    }
-
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<22: return "Good evening"
-        default: return "Hello"
-        }
-    }
-
-    private var summaryLine: String {
-        if items.isEmpty {
-            return "Add your first items to start tracking freshness."
-        }
-
-        return "\(expiringSoonCount) expiring soon • \(expiredCount) expired"
-    }
-
-    private var lastSyncText: String {
-        guard let lastSyncDate else {
-            return "Syncing with Firestore…"
-        }
-
-        let relativeFormatter = RelativeDateTimeFormatter()
-        relativeFormatter.unitsStyle = .abbreviated
-        let relative = relativeFormatter.localizedString(for: lastSyncDate, relativeTo: Date())
-        return "Last synced \(relative)"
-    }
-
-    private var bannerModel: NotificationBannerModel? {
-        guard !items.isEmpty else { return nil }
-
-        if expiringSoonCount == 0 && expiredCount == 0 {
-            return NotificationBannerModel(
-                title: "Everything fresh!",
-                message: "No items are expiring soon. Nice work!",
-                style: .success
-            )
-        }
-
-        if expiringSoonCount > 0 {
-            let names = expiringSoonItems.prefix(3).map(\.name).joined(separator: ", ")
-            let extra = expiringSoonCount > 3 ? " +\(expiringSoonCount - 3) more" : ""
-            return NotificationBannerModel(
-                title: "\(expiringSoonCount) item\(expiringSoonCount == 1 ? "" : "s") expiring soon",
-                message: names.isEmpty ? "Check the expiring soon section." : "\(names)\(extra)",
-                style: .warning
-            )
-        }
-
-        return nil
-    }
-
-    private var expiringSoonItems: [Item] {
-        items.filter { (0...3).contains(daysUntilExpiration(for: $0)) }
-    }
-
-    private var expiringSoonCount: Int {
-        expiringSoonItems.count
-    }
-
-    private var expiredCount: Int {
-        items.filter { daysUntilExpiration(for: $0) < 0 }.count
-    }
-
-    @ViewBuilder
-    var gridContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DesignSpacing.lg) {
-                headerStack(includeHero: true)
-
-                ForEach(sectionedItems, id: \.title) { section in
-                    if !section.items.isEmpty {
-                        InventorySectionGridView(
-                            title: section.title,
-                            count: section.items.count,
-                            items: section.items,
-                            columns: gridColumns,
-                            iconForItem: iconName(for:),
-                            colorForItem: colorFor(item:),
-                            badgeTextForItem: badgeText(for:),
-                            subtitleForItem: subtitle(for:),
-                            daysUntil: { daysUntilExpiration(for: $0) },
-                            imageURLForItem: imageURL(for:),
-                            requestImage: { requestImage(for: $0) },
-                            onSelect: { selectedItem = $0 },
-                            onUse: useItem,
-                            onSnooze: snoozeItem,
-                            onDelete: deleteItem
-                        )
-                    }
-                }
-            }
-            .padding(.horizontal, DesignSpacing.md)
-            .padding(.bottom, DesignSpacing.xl)
-        }
-    }
-
-    @ViewBuilder
-    var listContent: some View {
-        List {
-            ForEach(sectionedItems, id: \.title) { section in
-                if !section.items.isEmpty {
-                    Section {
-                        ForEach(section.items) { item in
-                            InventoryListRow(
-                                item: item,
-                                iconName: iconName(for: item),
-                                badgeText: badgeText(for: item),
-                                subtitle: subtitle(for: item),
-                                color: colorFor(item: item),
-                                isUrgent: isUrgent(item),
-                                imageURL: imageURL(for: item)
-                            )
-                            .onAppear {
-                                requestImage(for: item)
-                            }
-                            .onTapGesture {
-                                selectedItem = item
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button {
-                                    useItem(item)
-                                } label: {
-                                    Label("Use", systemImage: "minus.circle")
-                                }
-                                .tint(.blue)
-
-                                Button {
-                                    snoozeItem(item)
-                                } label: {
-                                    Label("Snooze", systemImage: "clock.arrow.circlepath")
-                                }
-
-                                Button(role: .destructive) {
-                                    deleteItem(item)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                        .onDelete { offsets in
-                            deleteItems(at: offsets, in: section.items)
-                        }
-                    } header: {
-                        InventorySectionHeader(title: section.title, count: section.items.count)
-                    }
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .safeAreaInset(edge: .top) {
-            headerStack(includeHero: true)
-                .padding(.horizontal, DesignSpacing.md)
-                .padding(.bottom, DesignSpacing.md)
-                .background(DesignPalette.background)
         }
     }
 }
@@ -355,6 +188,86 @@ private extension InventoryListView {
     func stopListening() {
         listener?.remove()
         listener = nil
+    }
+
+    var categoriesForFilter: [String] {
+        let unique = uniqueCategories
+        if unique.contains("All") {
+            return unique
+        } else {
+            return ["All"] + unique
+        }
+    }
+
+    var heroItem: Item? {
+        filteredAndSortedItems
+            .filter { daysUntilExpiration(for: $0) >= 0 }
+            .min { $0.expirationDate < $1.expirationDate }
+    }
+
+    var bannerModel: NotificationBannerModel? {
+        guard !items.isEmpty else { return nil }
+
+        if expiringSoonCount == 0 && expiredCount == 0 {
+            return NotificationBannerModel(
+                title: "Everything fresh!",
+                message: "No items are expiring soon. Nice work!",
+                style: .success
+            )
+        }
+
+        if expiringSoonCount > 0 {
+            let names = expiringSoonItems.prefix(3).map(\.name).joined(separator: ", ")
+            let extra = expiringSoonCount > 3 ? " +\(expiringSoonCount - 3) more" : ""
+            return NotificationBannerModel(
+                title: "\(expiringSoonCount) item\(expiringSoonCount == 1 ? "" : "s") expiring soon",
+                message: names.isEmpty ? "Check the expiring soon section." : "\(names)\(extra)",
+                style: .warning
+            )
+        }
+
+        return nil
+    }
+
+    var expiringSoonItems: [Item] {
+        items.filter { (0...3).contains(daysUntilExpiration(for: $0)) }
+    }
+
+    var expiringSoonCount: Int {
+        expiringSoonItems.count
+    }
+
+    var expiredCount: Int {
+        items.filter { daysUntilExpiration(for: $0) < 0 }.count
+    }
+
+    var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default: return "Hello"
+        }
+    }
+
+    var summaryLine: String {
+        if items.isEmpty {
+            return "Add your first items to start tracking freshness."
+        }
+
+        return "\(expiringSoonCount) expiring soon • \(expiredCount) expired"
+    }
+
+    var lastSyncText: String {
+        guard let lastSyncDate else {
+            return "Syncing with Firestore…"
+        }
+
+        let relativeFormatter = RelativeDateTimeFormatter()
+        relativeFormatter.unitsStyle = .abbreviated
+        let relative = relativeFormatter.localizedString(for: lastSyncDate, relativeTo: Date())
+        return "Last synced \(relative)"
     }
 }
 
@@ -521,7 +434,214 @@ private extension InventoryListView {
 }
 
 // MARK: - Subviews
-private struct InventoryFilterBar: View {
+private struct InventoryModernHeader: View {
+    let greeting: String
+    let summary: String
+    let syncStatus: String
+    let heroItem: Item?
+    let daysUntil: (Item) -> Int
+    let colorForItem: (Item) -> Color
+    let onUse: (Item) -> Void
+    let onSnooze: (Item) -> Void
+    let imageURL: (Item) -> URL?
+    let requestImage: (Item) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.md) {
+            VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                Text(greeting)
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Text(summary)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
+                Text(syncStatus)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+
+            if let heroItem {
+                HeroItemCard(
+                    item: heroItem,
+                    daysRemaining: daysUntil(heroItem),
+                    tint: colorForItem(heroItem),
+                    onUse: { onUse(heroItem) },
+                    onSnooze: { onSnooze(heroItem) },
+                    imageURL: imageURL(heroItem),
+                    requestImage: { requestImage(heroItem) }
+                )
+            }
+        }
+        .padding(DesignSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.09, green: 0.33, blue: 0.80),
+                    Color(red: 0.11, green: 0.52, blue: 0.87)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 20, x: 0, y: 12)
+    }
+}
+
+private struct HeroItemCard: View {
+    let item: Item
+    let daysRemaining: Int
+    let tint: Color
+    let onUse: () -> Void
+    let onSnooze: () -> Void
+    let imageURL: URL?
+    let requestImage: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+            HStack(alignment: .center, spacing: DesignSpacing.sm) {
+                FoodThumbnailView(imageURL: imageURL, iconName: "fork.knife", tint: .white.opacity(0.85), size: 54)
+                    .onAppear(perform: requestImage)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                    )
+
+                VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                    Text(item.name)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text(heroSubtitle)
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.85))
+                }
+                Spacer()
+                StatusBadge(text: badgeText, color: tint, isUrgent: true)
+            }
+
+            HStack(spacing: DesignSpacing.sm) {
+                Button {
+                    onUse()
+                } label: {
+                    Label("Use now", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.vertical, DesignSpacing.xs)
+                        .padding(.horizontal, DesignSpacing.md)
+                        .background(Color.white.opacity(0.2), in: Capsule())
+                }
+
+                Button {
+                    onSnooze()
+                } label: {
+                    Label("Snooze 1 day", systemImage: "clock.arrow.circlepath")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.vertical, DesignSpacing.xs)
+                        .padding(.horizontal, DesignSpacing.md)
+                        .background(Color.white.opacity(0.12), in: Capsule())
+                }
+            }
+        }
+    }
+
+    private var heroSubtitle: String {
+        if daysRemaining < 0 {
+            return "Already expired — check before using."
+        } else if daysRemaining == 0 {
+            return "Expires today. Time to create something delicious!"
+        } else if daysRemaining == 1 {
+            return "1 day remaining. Plan a recipe tonight."
+        } else {
+            return "Expires in \(daysRemaining) days."
+        }
+    }
+
+    private var badgeText: String {
+        if daysRemaining < 0 {
+            return "Expired"
+        } else if daysRemaining == 0 {
+            return "Today"
+        } else if daysRemaining == 1 {
+            return "1 day"
+        } else {
+            return "\(daysRemaining) days"
+        }
+    }
+}
+
+private struct SummaryStatRow: View {
+    let expiringSoon: Int
+    let expired: Int
+    let total: Int
+
+    var body: some View {
+        HStack(spacing: DesignSpacing.sm) {
+            SummaryStatCard(
+                title: "Expiring Soon",
+                value: "\(expiringSoon)",
+                icon: "timer",
+                tint: DesignPalette.warning
+            )
+
+            SummaryStatCard(
+                title: "Expired",
+                value: "\(expired)",
+                icon: "exclamationmark.octagon.fill",
+                tint: DesignPalette.danger
+            )
+
+            SummaryStatCard(
+                title: "Total Items",
+                value: "\(total)",
+                icon: "refrigerator.fill",
+                tint: DesignPalette.accent
+            )
+        }
+    }
+}
+
+private struct SummaryStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+            HStack(spacing: DesignSpacing.xs) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(tint)
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DesignPalette.secondaryText)
+            }
+            Text(value)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundColor(DesignPalette.primaryText)
+        }
+        .padding(DesignSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(DesignPalette.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(DesignPalette.separator, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 12, x: 0, y: 10)
+    }
+}
+
+private struct FilterSection: View {
+    @Binding var filter: InventoryFilter
     @Binding var sortOption: SortOption
     @Binding var selectedCategory: String
     @Binding var viewMode: InventoryViewMode
@@ -529,29 +649,41 @@ private struct InventoryFilterBar: View {
     let categories: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+        VStack(alignment: .leading, spacing: DesignSpacing.md) {
+            FilterChips(
+                selection: $filter,
+                options: InventoryFilter.allCases
+            )
+
             HStack(spacing: DesignSpacing.sm) {
-                Picker("Sort by", selection: $sortOption) {
-                    ForEach(SortOption.allCases, id: \.self) { option in
-                        Text(option.rawValue).tag(option)
+                Menu {
+                    Picker("Sort by", selection: $sortOption) {
+                        ForEach(SortOption.allCases, id: \.self) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                } label: {
+                    ControlPill(title: sortOption.rawValue, systemImage: "arrow.up.arrow.down.circle")
+                }
+
+                Menu {
+                    Picker("Category", selection: $selectedCategory) {
+                        ForEach(categories, id: \.self) { category in
+                            Text(category).tag(category)
+                        }
+                    }
+                } label: {
+                    ControlPill(title: selectedCategory, systemImage: "tag")
+                }
+
+                Picker("", selection: $viewMode) {
+                    ForEach(InventoryViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
-                .pickerStyle(.menu)
-
-                Picker("Category", selection: $selectedCategory) {
-                    ForEach(categories, id: \.self) { category in
-                        Text(category).tag(category)
-                    }
-                }
-                .pickerStyle(.menu)
+                .pickerStyle(.segmented)
+                .frame(width: 180)
             }
-
-            Picker("View Mode", selection: $viewMode) {
-                ForEach(InventoryViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
         }
     }
 }
@@ -574,6 +706,296 @@ private struct InventorySectionHeader: View {
     }
 }
 
+private struct ExpiringSoonCarousel: View {
+    let items: [Item]
+    let daysUntil: (Item) -> Int
+    let iconForItem: (Item) -> String
+    let colorForItem: (Item) -> Color
+    let subtitleForItem: (Item) -> String
+    let imageURLForItem: (Item) -> URL?
+    let onSelect: (Item) -> Void
+    let requestImage: (Item) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+            HStack {
+                Text("Expiring Soon")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                Spacer()
+                Text("See \(items.count > 1 ? "all" : "details")")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DesignPalette.secondaryText)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignSpacing.md) {
+                    ForEach(items) { item in
+                        ExpiringSoonCard(
+                            item: item,
+                            subtitle: subtitleForItem(item),
+                            daysRemaining: daysUntil(item),
+                            tint: colorForItem(item),
+                            imageURL: imageURLForItem(item),
+                            iconName: iconForItem(item),
+                            onSelect: { onSelect(item) },
+                            requestImage: { requestImage(item) }
+                        )
+                    }
+                }
+                .padding(.vertical, DesignSpacing.xs)
+            }
+        }
+    }
+}
+
+private struct ExpiringSoonCard: View {
+    let item: Item
+    let subtitle: String
+    let daysRemaining: Int
+    let tint: Color
+    let imageURL: URL?
+    let iconName: String
+    let onSelect: () -> Void
+    let requestImage: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: tint, size: 60)
+                    .onAppear(perform: requestImage)
+
+                VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                    Text(item.name)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(DesignPalette.primaryText)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(DesignPalette.secondaryText)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                HStack {
+                    StatusBadge(text: statusText, color: tint, isUrgent: true)
+                    Spacer()
+                    Text("\(Int(item.quantity)) \(item.unit)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(DesignSpacing.md)
+            .frame(width: 200, height: 220)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(DesignPalette.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(tint.opacity(0.12), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 10)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var statusText: String {
+        if daysRemaining < 0 {
+            return "Expired"
+        } else if daysRemaining == 0 {
+            return "Today"
+        } else if daysRemaining == 1 {
+            return "Tomorrow"
+        } else {
+            return "In \(daysRemaining)d"
+        }
+    }
+}
+
+private struct ModernInventorySection: View {
+    let sections: [(title: String, items: [Item])]
+    let viewMode: InventoryViewMode
+    let iconForItem: (Item) -> String
+    let colorForItem: (Item) -> Color
+    let badgeTextForItem: (Item) -> String
+    let subtitleForItem: (Item) -> String
+    let daysUntil: (Item) -> Int
+    let imageURLForItem: (Item) -> URL?
+    let requestImage: (Item) -> Void
+    let onSelect: (Item) -> Void
+    let onUse: (Item) -> Void
+    let onSnooze: (Item) -> Void
+    let onDelete: (Item) -> Void
+
+    private var gridColumns: [GridItem] {
+        [GridItem(.flexible(), spacing: DesignSpacing.md),
+         GridItem(.flexible(), spacing: DesignSpacing.md)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.lg) {
+            ForEach(sections, id: \.title) { section in
+                if !section.items.isEmpty {
+                    VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                        HStack {
+                            Text(section.title)
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            Spacer()
+                            Text("\(section.items.count)")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if viewMode == .grid {
+                            LazyVGrid(columns: gridColumns, spacing: DesignSpacing.md) {
+                                ForEach(section.items) { item in
+                                    InventoryItemCard(
+                                        item: item,
+                                        iconName: iconForItem(item),
+                                        badgeText: badgeTextForItem(item),
+                                        subtitle: subtitleForItem(item),
+                                        daysRemaining: daysUntil(item),
+                                        cardColor: colorForItem(item),
+                                        imageURL: imageURLForItem(item),
+                                        onSelect: { onSelect(item) },
+                                        onUse: { onUse(item) },
+                                        onSnooze: { onSnooze(item) },
+                                        onDelete: { onDelete(item) }
+                                    )
+                                    .onAppear {
+                                        requestImage(item)
+                                    }
+                                }
+                            }
+                        } else {
+                            VStack(spacing: DesignSpacing.sm) {
+                                ForEach(section.items) { item in
+                                    ModernInventoryRow(
+                                        item: item,
+                                        iconName: iconForItem(item),
+                                        badgeText: badgeTextForItem(item),
+                                        subtitle: subtitleForItem(item),
+                                        color: colorForItem(item),
+                                        isUrgent: (0...3).contains(daysUntil(item)),
+                                        imageURL: imageURLForItem(item),
+                                        onSelect: { onSelect(item) },
+                                        onUse: { onUse(item) },
+                                        onSnooze: { onSnooze(item) },
+                                        onDelete: { onDelete(item) }
+                                    )
+                                    .onAppear {
+                                        requestImage(item)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ModernInventoryRow: View {
+    let item: Item
+    let iconName: String
+    let badgeText: String
+    let subtitle: String
+    let color: Color
+    let isUrgent: Bool
+    let imageURL: URL?
+    let onSelect: () -> Void
+    let onUse: () -> Void
+    let onSnooze: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: DesignSpacing.sm) {
+                FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: color, size: 52)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(color.opacity(0.3), lineWidth: 1)
+                    )
+
+                VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                    HStack(spacing: DesignSpacing.xs) {
+                        Text(item.name)
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundColor(DesignPalette.primaryText)
+                        Spacer()
+                        StatusBadge(text: badgeText, color: color, isUrgent: isUrgent)
+                    }
+
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(DesignPalette.secondaryText)
+
+                    HStack(spacing: DesignSpacing.xs) {
+                        Text("\(Int(item.quantity)) \(item.unit)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        if let category = item.category {
+                            Text(category.capitalized)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(color)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+            .padding(DesignSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(DesignPalette.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(color.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(action: onUse) {
+                Label("Use", systemImage: "minus.circle")
+            }
+
+            Button(action: onSnooze) {
+                Label("Snooze 1 day", systemImage: "clock.arrow.circlepath")
+            }
+
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+}
+
+private struct ControlPill: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: DesignSpacing.xs) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+        }
+        .padding(.vertical, DesignSpacing.xs)
+        .padding(.horizontal, DesignSpacing.md)
+        .background(
+            Capsule()
+                .fill(DesignPalette.surface)
+        )
+        .overlay(
+            Capsule()
+                .stroke(DesignPalette.separator, lineWidth: 1)
+        )
+    }
+}
 private struct InventorySectionGridView: View {
     let title: String
     let count: Int
