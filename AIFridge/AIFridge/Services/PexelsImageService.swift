@@ -91,9 +91,9 @@ final class PexelsImageService {
 
     private func performSearch(query: String, apiKey: String, size: ImageSize) async throws -> URL? {
         var components = URLComponents(string: "https://api.pexels.com/v1/search")!
-        var enrichedQuery = query
+        let enrichedQuery = query
 
-        var items: [URLQueryItem] = [
+        let items: [URLQueryItem] = [
             URLQueryItem(name: "query", value: enrichedQuery),
             URLQueryItem(name: "per_page", value: "1"),
             URLQueryItem(name: "orientation", value: "square"),

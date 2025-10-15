@@ -158,7 +158,6 @@ final class ExpirationNotificationScheduler {
         }
     }
 
-    @MainActor
     private func fetchItems() async throws -> [Item] {
         try await withCheckedThrowingContinuation { continuation in
             db.collection("items").getDocuments { snapshot, error in

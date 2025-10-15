@@ -53,11 +53,11 @@ struct InventoryListView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                DesignPalette.background
+                FridgeBackground()
                     .ignoresSafeArea()
 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: DesignSpacing.lg) {
+                    VStack(spacing: DesignSpacing.md) {
                         InventoryModernHeader(
                             greeting: greeting,
                             summary: summaryLine,
@@ -73,7 +73,7 @@ struct InventoryListView: View {
                         .padding(.horizontal, DesignSpacing.lg)
                         .padding(.top, DesignSpacing.lg)
 
-                        VStack(spacing: DesignSpacing.lg) {
+                        VStack(spacing: DesignSpacing.md) {
                             SummaryStatRow(
                                 expiringSoon: expiringSoonCount,
                                 expired: expiredCount,
@@ -733,38 +733,39 @@ private struct ExpiringSoonCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: DesignSpacing.sm) {
-                FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: tint, size: 60)
-                    .onAppear(perform: requestImage)
+            VStack(spacing: DesignSpacing.sm) {
+                FridgeAppIcon(
+                    imageURL: imageURL,
+                    iconName: iconName,
+                    tint: tint,
+                    quantityText: formattedQuantityText(for: item)
+                )
+                .onAppear(perform: requestImage)
 
-                VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                VStack(spacing: DesignSpacing.xxs) {
                     Text(item.name)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(DesignPalette.primaryText)
-                        .lineLimit(1)
-                }
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
 
-                Spacer()
-
-                HStack {
-                    StatusBadge(text: statusText, color: tint, isUrgent: true)
-                    Spacer()
-                    Text("\(Int(item.quantity)) \(item.unit)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                    Text(statusText)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(tint)
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .padding(DesignSpacing.md)
-            .frame(width: 200, height: 220)
+            .padding(DesignSpacing.xs)
+            .frame(width: 150, height: 190)
             .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(DesignPalette.surface)
+                .ultraThinMaterial,
+                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(tint.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 10)
         }
         .buttonStyle(.plain)
     }
@@ -798,24 +799,21 @@ private struct ModernInventorySection: View {
     let onDelete: (Item) -> Void
 
     private var gridColumns: [GridItem] {
-        [GridItem(.flexible(), spacing: DesignSpacing.md),
-         GridItem(.flexible(), spacing: DesignSpacing.md)]
+        Array(
+            repeating: GridItem(.flexible(), spacing: DesignSpacing.sm),
+            count: 3
+        )
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSpacing.lg) {
+        VStack(alignment: .leading, spacing: DesignSpacing.md) {
             ForEach(sections, id: \.title) { section in
                 if !section.items.isEmpty {
-                    VStack(alignment: .leading, spacing: DesignSpacing.sm) {
-                        HStack {
-                            Text(section.title)
-                                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            Spacer()
-                            Text("\(section.items.count)")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-
+                    FridgeShelfContainer(
+                        title: section.title,
+                        count: section.items.count,
+                        isGrid: viewMode == .grid
+                    ) {
                         if viewMode == .grid {
                             LazyVGrid(columns: gridColumns, spacing: DesignSpacing.md) {
                                 ForEach(section.items) { item in
@@ -826,7 +824,6 @@ private struct ModernInventorySection: View {
                                         daysRemaining: daysUntil(item),
                                         cardColor: colorForItem(item),
                                         imageURL: imageURLForItem(item),
-                                        showExpiration: shouldShowExpiration(item),
                                         onSelect: { onSelect(item) },
                                         onUse: { onUse(item) },
                                         onSnooze: { onSnooze(item) },
@@ -866,6 +863,61 @@ private struct ModernInventorySection: View {
     }
 }
 
+private struct FridgeShelfContainer<Content: View>: View {
+    let title: String
+    let count: Int
+    let isGrid: Bool
+    let content: Content
+
+    init(title: String, count: Int, isGrid: Bool, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.count = count
+        self.isGrid = isGrid
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+            VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                HStack(spacing: DesignSpacing.xs) {
+                    Text(title.uppercased())
+                        .kerning(1.2)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.85))
+                    Spacer()
+                    Text("\(count)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, DesignSpacing.xs)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(Color.white.opacity(0.14))
+                        )
+                }
+                Divider()
+                    .background(Color.white.opacity(0.12))
+                    .overlay(Color.white.opacity(0.35))
+
+                content
+            }
+            .padding(EdgeInsets(top: isGrid ? DesignSpacing.sm : DesignSpacing.md,
+                                leading: DesignSpacing.md,
+                                bottom: isGrid ? DesignSpacing.sm : DesignSpacing.md,
+                                trailing: DesignSpacing.md))
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 36, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+    }
+}
+
 private struct ModernInventoryRow: View {
     let item: Item
     let iconName: String
@@ -882,7 +934,7 @@ private struct ModernInventoryRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: DesignSpacing.sm) {
-                FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: color, size: 52)
+                FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: color, size: 46)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(color.opacity(0.3), lineWidth: 1)
@@ -891,7 +943,7 @@ private struct ModernInventoryRow: View {
                 VStack(alignment: .leading, spacing: DesignSpacing.xs) {
                     HStack(spacing: DesignSpacing.xs) {
                         Text(item.name)
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .foregroundColor(DesignPalette.primaryText)
                         Spacer()
                         if showExpiration {
@@ -899,17 +951,18 @@ private struct ModernInventoryRow: View {
                         }
                     }
 
-                    QuantityPill(text: "\(Int(item.quantity)) \(item.unit)", tint: color)
+                    QuantityPill(text: "\(Int(item.quantity)) \(item.unit)", tint: color, compact: true)
                 }
             }
             .padding(DesignSpacing.md)
             .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(DesignPalette.surface)
+                .ultraThinMaterial,
+                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(color.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                    .blendMode(.overlay)
             )
         }
         .buttonStyle(.plain)
@@ -956,17 +1009,102 @@ private struct ControlPill: View {
 private struct QuantityPill: View {
     let text: String
     let tint: Color
+    var compact: Bool = false
 
     var body: some View {
         Text(text)
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .font(.system(size: compact ? 12 : 14, weight: .semibold, design: .rounded))
             .foregroundColor(tint)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 12)
+            .padding(.vertical, compact ? 4 : 6)
+            .padding(.horizontal, compact ? 10 : 12)
             .background(
                 Capsule()
                     .fill(tint.opacity(0.15))
             )
+    }
+}
+
+private struct QuantityBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.55))
+            )
+            .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 2)
+    }
+}
+
+private func formattedQuantityText(for item: Item) -> String {
+    let quantity = item.quantity
+    if abs(quantity.rounded() - quantity) < 0.01 {
+        return "×\(Int(quantity))"
+    } else {
+        return "×\(String(format: "%.1f", quantity))"
+    }
+}
+
+private struct FridgeBackground: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.size.height
+            let shelves = max(3, Int(height / 180))
+
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.90, green: 0.95, blue: 0.99),
+                        Color(red: 0.82, green: 0.90, blue: 0.96),
+                        Color(red: 0.78, green: 0.86, blue: 0.92)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack {
+                    ForEach(0..<shelves, id: \.self) { _ in
+                        Spacer()
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.35),
+                                        Color.white.opacity(0.05)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(height: 2)
+                            .padding(.horizontal, 24)
+                    }
+                    Spacer()
+                }
+
+                HStack {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 2)
+                    Spacer()
+                    Rectangle()
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 2)
+                }
+                .padding(.vertical, height * 0.05)
+                .padding(.horizontal, 18)
+
+                RoundedRectangle(cornerRadius: 48, style: .continuous)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 3)
+                    .padding(12)
+                    .blur(radius: 1.5)
+            }
+        }
     }
 }
 private struct InventorySectionGridView: View {
@@ -998,7 +1136,6 @@ private struct InventorySectionGridView: View {
                         daysRemaining: daysUntil(item),
                         cardColor: colorForItem(item),
                         imageURL: imageURLForItem(item),
-                        showExpiration: true,
                         onSelect: { onSelect(item) },
                         onUse: { onUse(item) },
                         onSnooze: { onSnooze(item) },
@@ -1020,7 +1157,6 @@ private struct InventoryItemCard: View {
     let daysRemaining: Int
     let cardColor: Color
     let imageURL: URL?
-    let showExpiration: Bool
     let onSelect: () -> Void
     let onUse: () -> Void
     let onSnooze: () -> Void
@@ -1028,33 +1164,31 @@ private struct InventoryItemCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: DesignSpacing.sm) {
-                HStack {
-                    FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: cardColor, size: 48)
-                    Spacer()
-                    if showExpiration {
-                        StatusBadge(text: badgeText, color: cardColor, isUrgent: daysRemaining <= 3 && daysRemaining >= 0)
-                    }
+            VStack(spacing: DesignSpacing.sm) {
+                FridgeAppIcon(
+                    imageURL: imageURL,
+                    iconName: iconName,
+                    tint: cardColor,
+                    quantityText: formattedQuantityText(for: item)
+                )
+
+                VStack(spacing: DesignSpacing.xxs) {
+                    Text(item.name)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(DesignPalette.primaryText)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+
+                    Text(badgeText)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(statusColor)
+                        .frame(maxWidth: .infinity)
                 }
-
-                Text(item.name)
-                    .font(DesignTypography.title)
-                    .foregroundColor(DesignPalette.primaryText)
-                    .lineLimit(1)
-
-                QuantityPill(text: "\(Int(item.quantity)) \(item.unit)", tint: cardColor)
             }
-            .padding(DesignSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(cardColor.opacity(0.15), lineWidth: 1)
-            )
-            .designShadow(DesignShadow.card)
+            .padding(.vertical, DesignSpacing.xs)
+            .padding(.horizontal, DesignSpacing.xs)
+            .frame(maxWidth: .infinity, minHeight: 170)
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -1076,6 +1210,40 @@ private struct InventoryItemCard: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+
+    private var statusColor: Color {
+        if daysRemaining < 0 {
+            return DesignPalette.danger
+        } else if daysRemaining <= 3 {
+            return DesignPalette.warning
+        } else {
+            return DesignPalette.secondaryText
+        }
+    }
+}
+
+private struct FridgeAppIcon: View {
+    let imageURL: URL?
+    let iconName: String
+    let tint: Color
+    let quantityText: String
+
+    private let iconSize: CGFloat = 76
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: tint, size: iconSize)
+                .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.28, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: iconSize * 0.28, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                )
+
+            QuantityBadge(text: quantityText)
+                .offset(x: 6, y: -6)
+        }
+        .frame(width: iconSize, height: iconSize)
     }
 }
 
@@ -1202,8 +1370,10 @@ private struct FoodThumbnailView: View {
     var size: CGFloat = 48
 
     var body: some View {
+        let cornerRadius = size * 0.28
+
         ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(tint.opacity(0.12))
             if let imageURL {
                 AsyncImage(url: imageURL) { phase in
@@ -1226,14 +1396,14 @@ private struct FoodThumbnailView: View {
                             .foregroundStyle(tint)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             } else {
                 Image(systemName: iconName)
                     .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
                     .foregroundStyle(tint)
             }
 
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(tint.opacity(0.25), lineWidth: 1)
         }
         .frame(width: size, height: size)
