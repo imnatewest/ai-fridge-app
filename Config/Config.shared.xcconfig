@@ -1,0 +1,5 @@
+#include? "Config.local.xcconfig"
+
+LOCAL_PEXELS_API_KEY ?= 
+
+PEXELS_API_KEY = $(LOCAL_PEXELS_API_KEY)

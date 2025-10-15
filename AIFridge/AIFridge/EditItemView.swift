@@ -22,6 +22,15 @@ struct EditItemView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let barcode = item.barcode, !barcode.isEmpty {
+                    Section(header: Text("Barcode")) {
+                        Label(barcode, systemImage: "barcode")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+
                 Section(header: Text("Item Details")) {
                     TextField("Name", text: $item.name)
                         // iOS 17+ onChange (two-parameter or zero-parameter)
@@ -159,6 +168,7 @@ extension Binding where Value == String {
         quantity: 0,
         unit: "pcs",
         expirationDate: Date(),
-        timestamp: Date()
+        timestamp: Date(),
+        barcode: nil
     ))
 }

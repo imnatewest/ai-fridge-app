@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 import FirebaseFirestore
 import FirebaseFirestoreSwift
 
@@ -39,6 +40,7 @@ struct InventoryListView: View {
     @State private var filter: InventoryFilter = .all
     @State private var lastSyncDate: Date?
     @State private var listener: ListenerRegistration?
+    @StateObject private var imageLoader = IngredientImageLoader()
 
     let db = Firestore.firestore()
 
@@ -80,6 +82,7 @@ struct InventoryListView: View {
             }
             .onDisappear {
                 stopListening()
+                imageLoader.cancelAll()
             }
         }
     }
@@ -237,6 +240,8 @@ private extension InventoryListView {
                             badgeTextForItem: badgeText(for:),
                             subtitleForItem: subtitle(for:),
                             daysUntil: { daysUntilExpiration(for: $0) },
+                            imageURLForItem: imageURL(for:),
+                            requestImage: { requestImage(for: $0) },
                             onSelect: { selectedItem = $0 },
                             onUse: useItem,
                             onSnooze: snoozeItem,
@@ -263,8 +268,12 @@ private extension InventoryListView {
                                 badgeText: badgeText(for: item),
                                 subtitle: subtitle(for: item),
                                 color: colorFor(item: item),
-                                isUrgent: isUrgent(item)
+                                isUrgent: isUrgent(item),
+                                imageURL: imageURL(for: item)
                             )
+                            .onAppear {
+                                requestImage(for: item)
+                            }
                             .onTapGesture {
                                 selectedItem = item
                             }
@@ -312,6 +321,10 @@ private extension InventoryListView {
 // MARK: - Firestore
 private extension InventoryListView {
     func listenToInventory() {
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            imageLoader.prepare(with: items)
+            return
+        }
         listener?.remove()
         listener = db.collection("items")
             .order(by: "timestamp", descending: true)
@@ -332,6 +345,7 @@ private extension InventoryListView {
                     try? doc.data(as: Item.self)
                 }
                 lastSyncDate = Date()
+                imageLoader.prepare(with: items)
 
                 print("✅ Loaded \(items.count) items")
                 ExpirationNotificationScheduler.shared.syncNotifications(with: items)
@@ -480,6 +494,14 @@ private extension InventoryListView {
         }
     }
 
+    func imageURL(for item: Item) -> URL? {
+        imageLoader.url(for: item)
+    }
+
+    func requestImage(for item: Item) {
+        imageLoader.loadIfNeeded(for: item)
+    }
+
     func useItem(_ item: Item) {
         guard let id = item.id else { return }
         var newQuantity = item.quantity - 1
@@ -562,6 +584,8 @@ private struct InventorySectionGridView: View {
     let badgeTextForItem: (Item) -> String
     let subtitleForItem: (Item) -> String
     let daysUntil: (Item) -> Int
+    let imageURLForItem: (Item) -> URL?
+    let requestImage: (Item) -> Void
     let onSelect: (Item) -> Void
     let onUse: (Item) -> Void
     let onSnooze: (Item) -> Void
@@ -580,11 +604,15 @@ private struct InventorySectionGridView: View {
                         subtitle: subtitleForItem(item),
                         daysRemaining: daysUntil(item),
                         cardColor: colorForItem(item),
+                        imageURL: imageURLForItem(item),
                         onSelect: { onSelect(item) },
                         onUse: { onUse(item) },
                         onSnooze: { onSnooze(item) },
                         onDelete: { onDelete(item) }
                     )
+                    .onAppear {
+                        requestImage(item)
+                    }
                 }
             }
         }
@@ -598,6 +626,7 @@ private struct InventoryItemCard: View {
     let subtitle: String
     let daysRemaining: Int
     let cardColor: Color
+    let imageURL: URL?
     let onSelect: () -> Void
     let onUse: () -> Void
     let onSnooze: () -> Void
@@ -607,9 +636,7 @@ private struct InventoryItemCard: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: DesignSpacing.sm) {
                 HStack {
-                    Image(systemName: iconName)
-                        .font(.title2)
-                        .foregroundColor(cardColor)
+                    FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: cardColor, size: 48)
                     Spacer()
                     StatusBadge(text: badgeText, color: cardColor, isUrgent: daysRemaining <= 3 && daysRemaining >= 0)
                 }
@@ -677,18 +704,21 @@ private struct InventoryListRow: View {
     let subtitle: String
     let color: Color
     let isUrgent: Bool
+    let imageURL: URL?
 
     var body: some View {
         HStack(spacing: DesignSpacing.sm) {
-            Image(systemName: iconName)
-                .font(.title3)
-                .frame(width: 24)
-                .foregroundStyle(.secondary)
-
-            Circle()
-                .fill(color)
-                .frame(width: 12, height: 12)
-
+            FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: color, size: 44)
+                .overlay(
+                    Circle()
+                        .fill(color)
+                        .frame(width: 14, height: 14)
+                        .overlay(
+                            Circle()
+                                .stroke(.white.opacity(0.8), lineWidth: 2)
+                        ),
+                    alignment: .bottomTrailing
+                )
             VStack(alignment: .leading, spacing: DesignSpacing.xs) {
                 HStack(alignment: .firstTextBaseline, spacing: DesignSpacing.xs) {
                     Text(item.name)
@@ -787,6 +817,52 @@ private struct InventoryHeroBanner: View {
     }
 }
 
+private struct FoodThumbnailView: View {
+    let imageURL: URL?
+    let iconName: String
+    let tint: Color
+    var size: CGFloat = 48
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(0.12))
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(tint)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        Image(systemName: iconName)
+                            .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                            .foregroundStyle(tint)
+                    @unknown default:
+                        Image(systemName: iconName)
+                            .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                            .foregroundStyle(tint)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                Image(systemName: iconName)
+                    .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                    .foregroundStyle(tint)
+            }
+
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(tint.opacity(0.25), lineWidth: 1)
+        }
+        .frame(width: size, height: size)
+        .clipped()
+    }
+}
+
 private struct StatusBadge: View {
     let text: String
     let color: Color
@@ -817,7 +893,8 @@ private struct StatusBadge: View {
             quantity: 1,
             unit: "pc",
             expirationDate: expiry,
-            timestamp: Date()
+            timestamp: Date(),
+            barcode: nil
         )
     }
 

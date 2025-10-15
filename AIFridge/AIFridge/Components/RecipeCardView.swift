@@ -10,7 +10,7 @@ import SwiftUI
 struct RecipeSummary: Identifiable, Hashable {
     let id: UUID
     let title: String
-    let imageURL: URL?
+    var imageURL: URL?
     let usedCount: Int
     let missingCount: Int
     let durationText: String?

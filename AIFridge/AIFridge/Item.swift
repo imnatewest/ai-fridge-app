@@ -16,4 +16,5 @@ struct Item: Identifiable, Codable {
     var unit: String
     var expirationDate: Date
     var timestamp: Date
+    var barcode: String?
 }

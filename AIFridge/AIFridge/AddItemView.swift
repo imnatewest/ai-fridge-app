@@ -19,6 +19,10 @@ struct AddItemView: View {
     @State private var quantity = 1.0
     @State private var unit = "pcs"
     @State private var expirationDate = Date().addingTimeInterval(60 * 60 * 24 * 7) // +1 week
+    @State private var barcode = ""
+    @State private var productStatusMessage: String?
+    @State private var isFetchingProduct = false
+    @State private var showScanner = false
 
     // MARK: - Validation State
     @State private var nameError: String?
@@ -28,6 +32,36 @@ struct AddItemView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section(header: Text("Capture")) {
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan barcode", systemImage: "barcode.viewfinder")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isFetchingProduct)
+
+                    if !barcode.isEmpty {
+                        Label(barcode, systemImage: "barcode")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if isFetchingProduct {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Fetching product details…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if let productStatusMessage {
+                        Text(productStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section(header: Text("Item Details")) {
                     TextField("Name", text: $name)
                         .onChange(of: name) { _, _ in validateName() }
@@ -83,6 +117,11 @@ struct AddItemView: View {
             }
         }
         .onAppear { validateAll() }
+        .sheet(isPresented: $showScanner) {
+            BarcodeScannerSheet { code in
+                handleScannedBarcode(code)
+            }
+        }
     }
 
     // MARK: - Validation Logic
@@ -129,7 +168,8 @@ struct AddItemView: View {
             quantity: quantity,
             unit: unit,
             expirationDate: expirationDate,
-            timestamp: Date()
+            timestamp: Date(),
+            barcode: barcode.isEmpty ? nil : barcode
         )
 
         do {
@@ -140,6 +180,58 @@ struct AddItemView: View {
             dismiss()
         } catch {
             print("❌ Error saving item: \(error)")
+        }
+    }
+
+    private func handleScannedBarcode(_ code: String) {
+        let sanitized = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sanitized.isEmpty else { return }
+
+        guard !isFetchingProduct else { return }
+
+        barcode = sanitized
+        productStatusMessage = "Looking up product…"
+        isFetchingProduct = true
+
+        Task {
+            do {
+                if let product = try await OpenFoodFactsService.shared.lookup(barcode: sanitized) {
+                    await MainActor.run {
+                        applyProduct(product)
+                        productStatusMessage = "Loaded details from \(product.primaryBrand ?? "Open Food Facts")."
+                    }
+                } else {
+                    await MainActor.run {
+                        productStatusMessage = "No product found. Enter details manually."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    productStatusMessage = "Lookup failed: \(error.localizedDescription)"
+                }
+            }
+
+            await MainActor.run {
+                isFetchingProduct = false
+            }
+        }
+    }
+
+    @MainActor
+    private func applyProduct(_ product: OpenFoodFactsProduct) {
+        if let nameFromProduct = product.displayName {
+            name = nameFromProduct
+            validateName()
+        }
+
+        if let categoryFromProduct = product.primaryCategory {
+            category = categoryFromProduct
+        }
+
+        if let quantityTuple = product.parsedQuantity {
+            quantity = max(quantityTuple.amount, 1)
+            unit = quantityTuple.unit
+            validateQuantity()
         }
     }
 }

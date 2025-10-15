@@ -14,6 +14,7 @@ final class RecipesViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var recipeCards: [RecipeSummary] = RecipeSummary.samples
     @Published var presentedRecipe: RecipeDetail?
+    private var imageLoadTask: Task<Void, Never>?
 
     struct RecipeDetail: Identifiable {
         let id: UUID
@@ -64,6 +65,38 @@ final class RecipesViewModel: ObservableObject {
 
     func addMissingIngredients(for recipe: RecipeDetail) {
         // TODO: Integrate shopping list sync.
+    }
+
+    init() {
+        loadImagesForCurrentCards()
+    }
+
+    deinit {
+        imageLoadTask?.cancel()
+    }
+
+    private func loadImagesForCurrentCards() {
+        imageLoadTask?.cancel()
+        let cards = recipeCards
+
+        imageLoadTask = Task {
+            var updatedCards = cards
+
+            for index in updatedCards.indices {
+                guard !Task.isCancelled else { return }
+                let title = updatedCards[index].title
+                do {
+                    if let url = try await PexelsImageService.shared.thumbnailURL(for: "food \(title)", size: .large) {
+                        updatedCards[index].imageURL = url
+                        await MainActor.run {
+                            self.recipeCards[index].imageURL = url
+                        }
+                    }
+                } catch {
+                    continue
+                }
+            }
+        }
     }
 }
 
@@ -176,7 +209,7 @@ private extension RecipeSummary {
         RecipeSummary(
             id: UUID(),
             title: "Creamy Lemon Pasta with Spinach",
-            imageURL: URL(string: "https://picsum.photos/seed/pasta/400/240"),
+            imageURL: nil,
             usedCount: 3,
             missingCount: 1,
             durationText: "25 min"
@@ -184,7 +217,7 @@ private extension RecipeSummary {
         RecipeSummary(
             id: UUID(),
             title: "Sheet Pan Salmon & Veggies",
-            imageURL: URL(string: "https://picsum.photos/seed/salmon/400/240"),
+            imageURL: nil,
             usedCount: 4,
             missingCount: 0,
             durationText: "30 min"
@@ -192,7 +225,7 @@ private extension RecipeSummary {
         RecipeSummary(
             id: UUID(),
             title: "Spiced Chickpea Buddha Bowl",
-            imageURL: URL(string: "https://picsum.photos/seed/buddha/400/240"),
+            imageURL: nil,
             usedCount: 5,
             missingCount: 2,
             durationText: "35 min"
