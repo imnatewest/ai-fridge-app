@@ -7,13 +7,16 @@
 
 import SwiftUI
 
-struct RecipeSummary: Identifiable, Hashable {
+struct RecipeSummary: Identifiable, Hashable, Sendable {
     let id: UUID
     let title: String
     var imageURL: URL?
     let usedCount: Int
     let missingCount: Int
     let durationText: String?
+    var ingredients: [String]? = nil
+    var instructions: [String]? = nil
+    var missingItems: [String]? = nil
 }
 
 struct RecipeCardView: View {

@@ -99,10 +99,19 @@ Reduce food waste and weeknight stress by giving households a single place to un
 1. Create a new SwiftUI iOS project (`xcode-select --install` if needed).
 2. Add package dependencies for Firebase (Authentication, Firestore) and the chosen networking layer (e.g., Alamofire).
 3. Provision Firebase project, download `GoogleService-Info.plist`, and enable anonymous + email auth.
-4. Stand up a lightweight backend (FastAPI/Node) with endpoints for `/lookup-barcode` and `/recipes`.
+4. Stand up a lightweight backend (FastAPI/Node) with endpoints for `/lookup-barcode`. Recipe generation can call OpenAI directly (see **AI configuration** below).
 5. Configure environment secrets (API keys, model endpoints) using Xcode schemes or a `.env` loader.
 6. Write unit tests for data models and snapshot tests for core SwiftUI views.
 7. Wire up CI to run tests and SwiftLint on each pull request.
+
+### AI configuration (OpenAI)
+
+| Key | Where to set | Description |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Xcode scheme env var **or** Info.plist entry | Required. Standard OpenAI API key used to call the Chat Completions endpoint. |
+| `OPENAI_MODEL` | Optional env var / Info.plist | Overrides the default `gpt-4.1-mini` model if you prefer a different tier. |
+
+The `RecipesView` screen automatically sends the current fridge inventory and the user’s prompt to OpenAI. If the API is unreachable or the key is missing, the UI falls back to sample recipe cards and displays an informational banner.
 
 ## Helpful resources
 
@@ -114,11 +123,11 @@ Reduce food waste and weeknight stress by giving households a single place to un
 
 ---
 
-Have ideas or feedback? Open an issue or submit a PR! 🚀
+
 
 ## Feature progress
 
-**Overall progress:** 8 / 12 features complete (~67%).
+**Overall progress:** 9 / 12 features complete (~75%).
 
 ### Completed
 
@@ -126,14 +135,13 @@ Have ideas or feedback? Open an issue or submit a PR! 🚀
 - [x] Firestore-backed inventory dashboard with grid/list modes, filtering controls, hero banner, and automatic ingredient thumbnail fetching via Pexels.
 - [x] Add/Edit item flows featuring validation, barcode scanning through VisionKit, Open Food Facts enrichment, and Firestore persistence plus notification scheduling.
 - [x] Expiration reminder engine that registers background refresh tasks and syncs pending notifications based on near-term expiry windows.
-- [x] Recipe exploration surface with AI suggestion placeholder, tappable recommendation cards, detailed sheets, and Pexels-powered imagery loading.
+- [x] Recipe exploration surface with OpenAI-backed meal generation, tappable recommendation cards, detailed sheets, and Pexels-powered imagery loading.
 - [x] Shopping list prototype that groups items by category and supports quick purchased toggles ahead of Firestore sync.
 - [x] Insights dashboard combining KPI stat cards with a Charts-based waste breakdown visualization.
 - [x] Settings surface with toggles for notifications and AI features, plus privacy actions placeholders.
 
 ### Upcoming
 
-- [ ] AI-powered recipe generation service that surfaces tailored meal cards directly from the backend intelligence layer.
 - [ ] Automated grocery list sync that forecasts replenishment needs and pushes lists to preferred retailers.
 - [ ] Fridge snapshot mode that reconciles inventory through quick shelf photos or short videos.
 - [ ] Wearable and voice assistant integrations for hands-free logging and status checks.

@@ -92,27 +92,14 @@ struct InventoryListView: View {
                                 NotificationBannerView(model: banner)
                             }
 
-                            if !expiringSoonItems.isEmpty {
-                                ExpiringSoonCarousel(
-                                    items: expiringSoonItems,
-                                    daysUntil: { daysUntilExpiration(for: $0) },
-                                    iconForItem: iconName(for:),
-                                    colorForItem: colorFor(item:),
-                                    subtitleForItem: subtitle(for:),
-                                    imageURLForItem: imageURL(for:),
-                                    onSelect: { selectedItem = $0 },
-                                    requestImage: requestImage(for:)
-                                )
-                            }
-
-                            ModernInventorySection(
-                                sections: sectionedItems,
-                                viewMode: viewMode,
-                                iconForItem: iconName(for:),
-                                colorForItem: colorFor(item:),
+            ModernInventorySection(
+                sections: sectionedItems,
+                viewMode: viewMode,
+                iconForItem: iconName(for:),
+                colorForItem: colorFor(item:),
                                 badgeTextForItem: badgeText(for:),
-                                subtitleForItem: subtitle(for:),
                                 daysUntil: { daysUntilExpiration(for: $0) },
+                                shouldShowExpiration: shouldShowExpirationNotice(for:),
                                 imageURLForItem: imageURL(for:),
                                 requestImage: requestImage(for:),
                                 onSelect: { selectedItem = $0 },
@@ -378,21 +365,8 @@ private extension InventoryListView {
         return (0...3).contains(days)
     }
 
-    func subtitle(for item: Item) -> String {
-        let days = daysUntilExpiration(for: item)
-        if days <= 3 {
-            return urgentSubtitle(for: item)
-        } else {
-            return "Expires \(item.expirationDate.formatted(date: .abbreviated, time: .omitted))"
-        }
-    }
-
-    func urgentSubtitle(for item: Item) -> String {
-        let days = daysUntilExpiration(for: item)
-        if days < 0 { return "Expired" }
-        if days == 0 { return "Expires today" }
-        if days == 1 { return "Expires tomorrow" }
-        return "Expires in \(days) days"
+    func shouldShowExpirationNotice(for item: Item) -> Bool {
+        daysUntilExpiration(for: item) <= 7
     }
 
     func iconName(for item: Item) -> String {
@@ -676,14 +650,16 @@ private struct FilterSection: View {
                     ControlPill(title: selectedCategory, systemImage: "tag")
                 }
 
-                Picker("", selection: $viewMode) {
-                    ForEach(InventoryViewMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 180)
+                Spacer(minLength: 0)
             }
+
+            Picker("", selection: $viewMode) {
+                ForEach(InventoryViewMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
     }
 }
@@ -711,7 +687,6 @@ private struct ExpiringSoonCarousel: View {
     let daysUntil: (Item) -> Int
     let iconForItem: (Item) -> String
     let colorForItem: (Item) -> Color
-    let subtitleForItem: (Item) -> String
     let imageURLForItem: (Item) -> URL?
     let onSelect: (Item) -> Void
     let requestImage: (Item) -> Void
@@ -732,7 +707,6 @@ private struct ExpiringSoonCarousel: View {
                     ForEach(items) { item in
                         ExpiringSoonCard(
                             item: item,
-                            subtitle: subtitleForItem(item),
                             daysRemaining: daysUntil(item),
                             tint: colorForItem(item),
                             imageURL: imageURLForItem(item),
@@ -750,7 +724,6 @@ private struct ExpiringSoonCarousel: View {
 
 private struct ExpiringSoonCard: View {
     let item: Item
-    let subtitle: String
     let daysRemaining: Int
     let tint: Color
     let imageURL: URL?
@@ -769,11 +742,6 @@ private struct ExpiringSoonCard: View {
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .foregroundColor(DesignPalette.primaryText)
                         .lineLimit(1)
-
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundColor(DesignPalette.secondaryText)
-                        .lineLimit(2)
                 }
 
                 Spacer()
@@ -820,8 +788,8 @@ private struct ModernInventorySection: View {
     let iconForItem: (Item) -> String
     let colorForItem: (Item) -> Color
     let badgeTextForItem: (Item) -> String
-    let subtitleForItem: (Item) -> String
     let daysUntil: (Item) -> Int
+    let shouldShowExpiration: (Item) -> Bool
     let imageURLForItem: (Item) -> URL?
     let requestImage: (Item) -> Void
     let onSelect: (Item) -> Void
@@ -855,10 +823,10 @@ private struct ModernInventorySection: View {
                                         item: item,
                                         iconName: iconForItem(item),
                                         badgeText: badgeTextForItem(item),
-                                        subtitle: subtitleForItem(item),
                                         daysRemaining: daysUntil(item),
                                         cardColor: colorForItem(item),
                                         imageURL: imageURLForItem(item),
+                                        showExpiration: shouldShowExpiration(item),
                                         onSelect: { onSelect(item) },
                                         onUse: { onUse(item) },
                                         onSnooze: { onSnooze(item) },
@@ -876,8 +844,8 @@ private struct ModernInventorySection: View {
                                         item: item,
                                         iconName: iconForItem(item),
                                         badgeText: badgeTextForItem(item),
-                                        subtitle: subtitleForItem(item),
                                         color: colorForItem(item),
+                                        showExpiration: shouldShowExpiration(item),
                                         isUrgent: (0...3).contains(daysUntil(item)),
                                         imageURL: imageURLForItem(item),
                                         onSelect: { onSelect(item) },
@@ -902,8 +870,8 @@ private struct ModernInventoryRow: View {
     let item: Item
     let iconName: String
     let badgeText: String
-    let subtitle: String
     let color: Color
+    let showExpiration: Bool
     let isUrgent: Bool
     let imageURL: URL?
     let onSelect: () -> Void
@@ -926,24 +894,12 @@ private struct ModernInventoryRow: View {
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundColor(DesignPalette.primaryText)
                         Spacer()
-                        StatusBadge(text: badgeText, color: color, isUrgent: isUrgent)
-                    }
-
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(DesignPalette.secondaryText)
-
-                    HStack(spacing: DesignSpacing.xs) {
-                        Text("\(Int(item.quantity)) \(item.unit)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        if let category = item.category {
-                            Text(category.capitalized)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(color)
+                        if showExpiration {
+                            StatusBadge(text: badgeText, color: color, isUrgent: isUrgent)
                         }
-                        Spacer()
                     }
+
+                    QuantityPill(text: "\(Int(item.quantity)) \(item.unit)", tint: color)
                 }
             }
             .padding(DesignSpacing.md)
@@ -996,6 +952,23 @@ private struct ControlPill: View {
         )
     }
 }
+
+private struct QuantityPill: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .foregroundColor(tint)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .background(
+                Capsule()
+                    .fill(tint.opacity(0.15))
+            )
+    }
+}
 private struct InventorySectionGridView: View {
     let title: String
     let count: Int
@@ -1004,7 +977,6 @@ private struct InventorySectionGridView: View {
     let iconForItem: (Item) -> String
     let colorForItem: (Item) -> Color
     let badgeTextForItem: (Item) -> String
-    let subtitleForItem: (Item) -> String
     let daysUntil: (Item) -> Int
     let imageURLForItem: (Item) -> URL?
     let requestImage: (Item) -> Void
@@ -1023,10 +995,10 @@ private struct InventorySectionGridView: View {
                         item: item,
                         iconName: iconForItem(item),
                         badgeText: badgeTextForItem(item),
-                        subtitle: subtitleForItem(item),
                         daysRemaining: daysUntil(item),
                         cardColor: colorForItem(item),
                         imageURL: imageURLForItem(item),
+                        showExpiration: true,
                         onSelect: { onSelect(item) },
                         onUse: { onUse(item) },
                         onSnooze: { onSnooze(item) },
@@ -1045,10 +1017,10 @@ private struct InventoryItemCard: View {
     let item: Item
     let iconName: String
     let badgeText: String
-    let subtitle: String
     let daysRemaining: Int
     let cardColor: Color
     let imageURL: URL?
+    let showExpiration: Bool
     let onSelect: () -> Void
     let onUse: () -> Void
     let onSnooze: () -> Void
@@ -1060,7 +1032,9 @@ private struct InventoryItemCard: View {
                 HStack {
                     FoodThumbnailView(imageURL: imageURL, iconName: iconName, tint: cardColor, size: 48)
                     Spacer()
-                    StatusBadge(text: badgeText, color: cardColor, isUrgent: daysRemaining <= 3 && daysRemaining >= 0)
+                    if showExpiration {
+                        StatusBadge(text: badgeText, color: cardColor, isUrgent: daysRemaining <= 3 && daysRemaining >= 0)
+                    }
                 }
 
                 Text(item.name)
@@ -1068,21 +1042,7 @@ private struct InventoryItemCard: View {
                     .foregroundColor(DesignPalette.primaryText)
                     .lineLimit(1)
 
-                Text(subtitle)
-                    .font(DesignTypography.caption)
-                    .foregroundColor(DesignPalette.secondaryText)
-
-                HStack {
-                    Text("\(Int(item.quantity)) \(item.unit)")
-                        .font(DesignTypography.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if let category = item.category {
-                        Text(category.capitalized)
-                            .font(DesignTypography.caption)
-                            .foregroundColor(cardColor)
-                    }
-                }
+                QuantityPill(text: "\(Int(item.quantity)) \(item.unit)", tint: cardColor)
             }
             .padding(DesignSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1123,7 +1083,6 @@ private struct InventoryListRow: View {
     let item: Item
     let iconName: String
     let badgeText: String
-    let subtitle: String
     let color: Color
     let isUrgent: Bool
     let imageURL: URL?
@@ -1152,9 +1111,6 @@ private struct InventoryListRow: View {
                     Text("\(Int(item.quantity)) \(item.unit)")
                         .foregroundStyle(.secondary)
                         .font(DesignTypography.caption)
-                    Text(subtitle)
-                        .font(DesignTypography.caption)
-                        .foregroundColor(DesignPalette.secondaryText)
                 }
             }
         }
