@@ -130,6 +130,7 @@ struct EditItemView: View {
         do {
             try db.collection("items").document(id).setData(from: item, merge: true)
             print("✅ Updated item: \(item.name)")
+            ExpirationNotificationScheduler.shared.rescheduleNotification(for: item)
             dismiss()
         } catch {
             print("❌ Error updating item: \(error)")

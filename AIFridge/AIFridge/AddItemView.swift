@@ -123,7 +123,7 @@ struct AddItemView: View {
             return
         }
 
-        let newItem = Item(
+        var newItem = Item(
             name: name,
             category: category.isEmpty ? nil : category,
             quantity: quantity,
@@ -133,7 +133,9 @@ struct AddItemView: View {
         )
 
         do {
-            _ = try db.collection("items").addDocument(from: newItem)
+            let reference = try db.collection("items").addDocument(from: newItem)
+            newItem.id = reference.documentID
+            ExpirationNotificationScheduler.shared.scheduleNotification(for: newItem)
             print("✅ Added new item: \(newItem.name)")
             dismiss()
         } catch {
